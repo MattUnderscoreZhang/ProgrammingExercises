@@ -12,7 +12,9 @@ class game(object):
     width = 1
     colors = ['R', 'O', 'Y', 'G', 'B', 'V'] # could also parse from input map
     game_map = [['W']]
+    control_map = [[1]]
     initial_map = [['W']]
+    initial_control_map = [[1]]
     target_color = 'R'
 
     def __init__(self, input_map_file):
@@ -23,27 +25,31 @@ class game(object):
         game_size = first_line.split(' ')
         self.width = int(game_size[0])
         self.height = int(game_size[1])
+        self.control_map = np.zeros((self.height, self.width))
+        self.control_map[0][0] = 1
+        self.initial_control_map = np.array(self.control_map)
         self.target_color = last_line[0]
 
-    # not a great implementation - the recursion is pretty bad
-    def flood(self, color, i=0, j=0, match_color=None):
-        if (i>=0 and j>=0 and i<self.height and j<self.width and color!=match_color):
-            if match_color == None:
-                match_color = self.game_map[i][j]
-            if self.game_map[i][j] == match_color:
-                self.game_map[i][j] = color
-                self.flood(color, i-1, j, match_color)
-                self.flood(color, i+1, j, match_color)
-                self.flood(color, i, j-1, match_color)
-                self.flood(color, i, j+1, match_color)
-                return True
-            else:
-                return False
-        else:
-            return False
+    # returns number of newly flooded squares
+    # I did this in a dumb way - I could have just had a single map, instead of game_map and control_map. Color control region a unique color, and recolor it according to step when displaying history.
+    def flood(self, color):
+        new_squares = 0
+        for i in range(self.height):
+            for j in range(self.width):
+                control_self = self.control_map[i][j]
+                control_above = i>0 and self.control_map[abs(i-1)][j]
+                control_left = j>0 and self.control_map[i][abs(j-1)]
+                control_below = i<self.height-1 and self.control_map[abs(i+1)][j]
+                control_right = j<self.width-1 and self.control_map[i][abs(j+1)]
+                if self.game_map[i][j]==color and (control_above or control_left or control_below or control_right) and not control_self:
+                    self.control_map[i][j] = 1
+                    new_squares += 1
+        self.game_map[self.control_map == 1] = color
+        return new_squares
 
     def display(self):
         print self.game_map
+        print self.control_map
         print ""
 
     def display_history(self, history):
@@ -53,31 +59,9 @@ class game(object):
             self.flood(color)
             self.display()
 
-    # not a good solution right now - we brute-force all movement chains, without pruning the search tree
-    def brute_force(self):
-        saved_map = np.array(self.game_map)
-        max_moves = 25
-        fewest_moves = 25
-        for moveset_backwards in itertools.product(self.colors, repeat=max_moves):
-            moveset = moveset_backwards[::-1]
-            print "Examining moveset", moveset
-            if any(moveset[i]==moveset[i+1] for i in range(len(moveset)-1)): # check for repeated values
-                continue
-            for n, move in enumerate(moveset):
-                if n+1 >= fewest_moves:
-                    self.game_map = np.array(saved_map)
-                    break
-                if not self.flood(move):
-                    self.game_map = np.array(saved_map)
-                    break
-            if all([all([i == self.target_color for i in row]) for row in self.game_map]):
-                best_moveset = moveset
-                fewest_moves = len(moveset)
-        self.game_map = np.array(self.initial_map)
-        return best_moveset
-
     def greedy(self):
         saved_map = np.array(self.game_map)
+        saved_control_map = np.array(self.control_map)
         max_moves = 500
         move_number = 1
         last_move = 'W'
@@ -89,22 +73,24 @@ class game(object):
                 if color == last_move:
                     continue
                 else:
-                    self.flood(color)
-                    if all([all([i == self.target_color for i in row]) for row in self.game_map]):
+                    n_flooded = self.flood(color)
+                    if np.count_nonzero(self.control_map) == self.height*self.width and color == self.target_color: # check win
                         best_move = color
                         move_number = max_moves
                         break
-                    self.flood('W')
-                    n_flooded = np.count_nonzero(saved_map != self.game_map)
                     if n_flooded > most_flooded:
                         most_flooded = n_flooded
                         best_move = color
-                self.game_map = np.array(saved_map)
+                self.game_map = np.array(saved_map) # reset to try another color
+                self.control_map = np.array(saved_control_map)
             history.append(best_move)
             self.flood(best_move)
             saved_map = np.array(self.game_map)
+            saved_control_map = np.array(self.control_map)
+            most_flooded = 0
             move_number += 1
         self.game_map = np.array(self.initial_map)
+        self.control_map = np.array(self.initial_control_map)
         return history
 
     def find_best_moves(self):
@@ -113,8 +99,9 @@ class game(object):
 
 if __name__ == "__main__":
 
-    input_map_file = "347_hard_map2.csv"
+    input_map_file = "347_hard_map3.csv"
     game = game(input_map_file)
+    # game.display_history(['Y', 'O', 'R', 'R'])
     history = game.find_best_moves()
     print history
     # game.display_history(history)
