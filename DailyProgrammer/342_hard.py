@@ -14,23 +14,34 @@ class state(object):
     # initialize state
     def __init__(self, state, dimensions):
         self.state = state
-        self.bin_state = bin(state)[2:].zfill(pow(2, self.dimensions)) # a box with n dimensions has 2^n locations a snake can go, so a complete state is 2^n bits long
+        self.bin_state = bin(state)[2:].zfill(pow(2, dimensions)) # a box with n dimensions has 2^n locations a snake can go, so a complete state is 2^n bits long
         self.dimensions = dimensions
+
+    # find corresponding index in a dimension - for instance, index 8 (1000) along dimension 1 will correspond to index 9 (1010)
+    def partner_index(self, index, dimension):
+        if index < pow(2, dimension):
+            bit = 0
+        else:
+            bit = bin(index)[-(dimension+1)]
+        if (bit == '1'):
+            return index - pow(2, dimension)
+        else:
+            return index + pow(2, dimension)
 
     # check state
     def check(self):
         n_snake_pieces = gmpy.popcount(self.state) # number of 1's in state
-        n_neighbors = 0
-        states_w_neighbors = [0] * self.dimensions
-        for d in range(self.dimensions):
-            n = pow(2, d+1) # number of bits to shift before checking
-            states_w_neighbors[d] = self.state & ((self.state >> n) | (self.state << n)) # these states have neighbors in the given direction
-        states_w_neighbors = [list(swn.zfill(pow(2, self.dimensions))) for swn in states_w_neighbors]
-        n_neighbors = np.sum(states_w_neighbors, axis=0)
+        n_neighbors = [0] * pow(2, self.dimensions)
+        for n, bit in enumerate(self.bin_state):
+            if bit == '1': 
+                for d in range(self.dimensions):
+                    n_neighbors[n] += (self.bin_state[self.partner_index(n, d)] == '1')
+        n_neighbors = np.array(n_neighbors)
         n_endpoints = len(n_neighbors[n_neighbors == 1])
         n_middles = len(n_neighbors[n_neighbors == 2])
         n_crowded = len(n_neighbors[n_neighbors > 2])
-        return n_endpoints, n_middles, n_crowded
+        n_isolated = n_snake_pieces - n_endpoints - n_middles - n_crowded
+        return n_snake_pieces, n_endpoints, n_middles, n_crowded, n_isolated
 
     # all locations neighboring a given location
     def neighbors(self, location):
@@ -42,16 +53,12 @@ class state(object):
 # prints the longest path for the snake-in-the-box problem
 def snake_in_the_box(dimensions):
 
-    possible_states = np.ones(pow(2, dimensions))
-    current_state = 0
-    possible_states[0] = 0
-    history = [0]
+    my_state = state(30, dimensions)
+    print my_state.bin_state
+    print my_state.check()
 
 # entry point
 if __name__ == "__main__":
 
     dimensions = 7
-
-    # snake_in_the_box(dimensions)
-    for neighbor in neighbors(8, dimensions):
-        print padded_bin(neighbor, dimensions)
+    snake_in_the_box(dimensions)
