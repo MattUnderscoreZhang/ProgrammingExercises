@@ -1,3 +1,4 @@
+from __future__ import division
 import itertools as it
 import numpy as np
 import gmpy
@@ -31,17 +32,21 @@ class state(object):
     # check state
     def check(self):
         n_snake_pieces = gmpy.popcount(self.state) # number of 1's in state
-        n_neighbors = [0] * pow(2, self.dimensions)
+        n_neighbors = np.zeros(pow(2, self.dimensions))
         for n, bit in enumerate(self.bin_state):
             if bit == '1': 
                 for d in range(self.dimensions):
                     n_neighbors[n] += (self.bin_state[self.partner_index(n, d)] == '1')
-        n_neighbors = np.array(n_neighbors)
         n_endpoints = len(n_neighbors[n_neighbors == 1])
         n_middles = len(n_neighbors[n_neighbors == 2])
         n_crowded = len(n_neighbors[n_neighbors > 2])
         n_isolated = n_snake_pieces - n_endpoints - n_middles - n_crowded
         return n_snake_pieces, n_endpoints, n_middles, n_crowded, n_isolated
+
+    # return a score for this state
+    def score(self):
+        n_snake_pieces, n_endpoints, n_middles, n_crowded, n_isolated = self.check()
+        return 3*n_middles - abs(2 - n_endpoints) - 5*(n_crowded) - n_isolated
 
     # all locations neighboring a given location
     def neighbors(self, location):
@@ -53,12 +58,81 @@ class state(object):
 # prints the longest path for the snake-in-the-box problem
 def snake_in_the_box(dimensions):
 
-    my_state = state(30, dimensions)
-    print my_state.bin_state
-    print my_state.check()
+    population_size = 500
+    n_survivors = 20
+    mutation_rate = 0.015
+    n_generations = 1000
+
+    snake_population = []
+    np.random.seed()
+    for _ in range(population_size): # initialize population
+        snake_state = np.random.randint(pow(2, dimensions))
+        snake_population.append(state(snake_state, dimensions))
+
+    for gen_n in range(n_generations):
+
+        # calculate fitnesses of snakes
+        scores = []
+        for snake in snake_population:
+            scores.append(snake.score())
+        snake_fitness = zip(scores, range(population_size))
+        snake_fitness.sort(key = lambda s : s[0], reverse = True)
+
+        # choose who survives (natural selection)
+
+        # # truncation selection
+        # survivor_scores = [s[0] for s in snake_fitness[:n_survivors]]
+        # best_snakes = [s[1] for s in snake_fitness[:n_survivors]]
+        # survivors = [snake_population[snake] for snake in best_snakes]
+
+        # roulette (proportional) selection
+        truncated_scores = [max(s[0], 1) for s in snake_fitness] # give each snake a chance
+        total_score = sum(truncated_scores)
+        probabilities = [s/total_score for s in truncated_scores]
+        survivor_indices = []
+        survivor_scores = []
+        survivors = []
+        keep_best_n = 3
+        best_snakes = [s[1] for s in snake_fitness[:n_survivors]]
+        for i in range(keep_best_n): # always keep best snakes
+            survivor_indices.append(best_snakes[i])
+            survivor_scores.append(truncated_scores[best_snakes[i]])
+            survivors.append(snake_population[best_snakes[i]])
+        while len(survivors) < n_survivors:
+            survivor_index = np.random.choice(population_size, 1, p=probabilities)[0]
+            if survivor_index not in survivor_indices:
+                survivor_indices.append(survivor_index)
+                survivor_scores.append(truncated_scores[survivor_index])
+                survivors.append(snake_population[survivor_index])
+        survivor_scores.sort(reverse = True)
+
+        snake_population = survivors
+        print "Survivor scores, generation", str(gen_n+1)+":", survivor_scores
+
+        # choose who mates (sexual selection)
+        for _ in range(population_size - n_survivors):
+            parent_1 = np.random.randint(n_survivors)
+            parent_2 = np.random.randint(n_survivors-1)
+            if parent_2 == parent_1: parent_2 = n_survivors-1
+            mutations = [str(int(i < mutation_rate)) for i in np.random.rand(pow(2, dimensions))]
+            mutations = "".join(mutations)
+            mutations = int(mutations, 2)
+            cut_point_a = np.random.randint(pow(2, dimensions))
+            cut_point_b = np.random.randint(pow(2, dimensions))
+            cut_point_1 = min(cut_point_a, cut_point_b)
+            cut_point_2 = max(cut_point_a, cut_point_b)
+            child_dna = int(snake_population[parent_1].bin_state[:cut_point_1] + snake_population[parent_2].bin_state[cut_point_1:cut_point_2] + snake_population[parent_1].bin_state[cut_point_2:], 2)
+            new_state = child_dna ^ mutations
+            new_snake = state(new_state, dimensions)
+            snake_population.append(new_snake)
+
+    print "Best snake:", snake_population[0].state
+    print "Snake stats (n_pieces, n_endpoints, n_middles, n_crowded, n_isolated):", snake_population[0].check()
 
 # entry point
 if __name__ == "__main__":
 
-    dimensions = 7
+    # best_snake_length = 96
+    # my_best = 65
+    dimensions = 8
     snake_in_the_box(dimensions)
