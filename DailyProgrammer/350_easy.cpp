@@ -11,6 +11,7 @@ using namespace std;
 // The first line are the available bookshelves in the store, seperated by a space.
 // From the second line on you get the book collections with the width followed by a title.
 // Output the number of bookshelves you have to buy. If you can't fit them, even just one, you respond with impossible.
+// NOTE: Damn problem is NP-hard, so it's brute force.
 
 int main() {
 
@@ -39,9 +40,36 @@ int main() {
         books.push_back(stoi(words[0]));
     }
 
-    // sort shelves and books in increasing order
-    sort(shelves.begin(), shelves.end());
-    sort(books.begin(), books.end());
+    // sort shelves in decreasing order
+    sort(shelves.begin(), shelves.end(), [](int i, int j){return i>j;});
 
-    vector<int> used_shelves;
+    // run through all permutations of books
+    int least_shelves = -1;
+    sort(books.begin(), books.end());
+    do {
+        int current_shelf_index = 0;
+        int current_shelf_used = 0;
+        bool skip = false;
+        for (int book : books) {
+            current_shelf_used += book;
+            if (shelves[current_shelf_index] < current_shelf_used) {
+                current_shelf_index++;
+                if (current_shelf_index + 1 > shelves.size())
+                    skip = true;
+                current_shelf_used = book;
+                if (shelves[current_shelf_index] < current_shelf_used)
+                    skip = true;
+            }
+        }
+        if (skip)
+            continue;
+        if (least_shelves > current_shelf_index + 1 || least_shelves == -1)
+            least_shelves = current_shelf_index + 1;
+    } while (next_permutation(books.begin(), books.end()));
+
+    // print results
+    if (least_shelves == -1)
+        cout << "Impossible" << endl;
+    else
+        cout << "Least possible number of shelves is " << least_shelves << endl;
 }
