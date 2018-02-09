@@ -1,3 +1,4 @@
 001 - basic TensorFlow exercises
 002 - solving a function via gradient descent in TF
 003 - find the area of a polygon in TF
+004 - MNIST in PyTorch
