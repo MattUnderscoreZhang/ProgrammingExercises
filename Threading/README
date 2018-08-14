@@ -1,0 +1,10 @@
+Learning about threading and multiprocessing.
+Following tutorial at http://www.bogotobogo.com/python/Multithread/python_multithreading_creating_threads.php.
+
+001 - Threads calling a simple test function.
+002 - Passing arguments to threads.
+003 - More testing of argument passing.
+004 - Giving names to threads.
+005 - Using logging.
+006 - Queues.
+007 - Using threads and queues in a class.
