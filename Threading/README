@@ -8,3 +8,5 @@ Following tutorial at http://www.bogotobogo.com/python/Multithread/python_multit
 005 - Using logging.
 006 - Queues.
 007 - Using threads and queues in a class.
+008 - Checking data loading with threads.
+009 - Looking at using data with queue.
