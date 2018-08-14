@@ -19,12 +19,14 @@ class Threader():
             self.count += 1
             self.my_queue.put(self.count)
 
-    def queue_reader(self):
-        while True:
-            value = self.my_queue.get()
-            yield value
-            self.my_queue.task_done()
+    def __next__(self):
+        value = self.my_queue.get()
+        self.my_queue.task_done()
+        return value
+
+    def __iter__(self):
+        return self
 
 threader = Threader()
-for data in threader.queue_reader():
+for data in threader:
     print(data)
