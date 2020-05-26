@@ -203,7 +203,7 @@ if __name__ == "__main__":
             train_acc.append(train_accuracy)
             labels = []
             predictions =[]
-            print('Val acc after {} epochs is: {} - train acc: {} - avg train loss: {}'.format(int(iter/print_every+1), round(accuracy, 2),round(train_accuracy,2), round(loss, 2)))
+            print('Val acc after {} epochs is: {} - train acc: {} - avg train loss: {}'.format(int(iter/output_every+1), round(accuracy, 2),round(train_accuracy,2), round(loss, 2)))
             
             all_losses.append(current_loss / output_every)
             current_loss = 0 
