@@ -1,5 +1,6 @@
 import random
 import math
+import time
 
 
 class Player:
@@ -15,10 +16,10 @@ class Player:
             cumulative_prob += prob
             if pass_prob <= cumulative_prob:
                 if player is None:
-                    print(">", self.name, "has scored!")
+                    print(">", self.name, "scores!")
                 else:
                     if self.team == player.team:
-                        print(">", self.name, "has passed to", player.name)
+                        print(">", self.name, "passes to", player.name)
                     else:
                         print(">", self.name, "has been intercepted by", player.name)
                 return player
@@ -40,7 +41,7 @@ class Team:
     def has_won(self):
         has_won = self.score >= 10
         if has_won:
-            print(self.name, "have won!")
+            print(self.name, "win!")
         return has_won
 
 
@@ -107,6 +108,7 @@ if __name__ == "__main__":
     print()
     player_with_ball = offender_A
     while True:
+        time.sleep(random.random()*5)  # so you can watch in real time
         current_team = player_with_ball.team
         next_player = player_with_ball.pass_ball()
         if random.random() < 0.25:
