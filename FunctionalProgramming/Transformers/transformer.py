@@ -8,11 +8,11 @@ class Transformer(NamedTuple):
 
 
 def init_exponentiator(initial: float, multiplier: float) -> Transformer:
-    class Params(NamedTuple):
+    class Params(NamedTuple):  # use of params?
         value: float
         multiplier: float
 
-    def exponentiate(exponentiator: Transformer) -> Transformer:
+    def exponentiate(exponentiator: Transformer) -> Transformer:  # defining a function inside the init function?
         return Transformer(Params(exponentiator.params.value * exponentiator.params.multiplier,
                                   exponentiator.params.multiplier),
                            exponentiator.transform)

@@ -7,5 +7,5 @@ class Zoo(NamedTuple):
 
 
 def listen(zoo: Zoo) -> None:
-    for my_animal in zoo.animals:
+    for my_animal in zoo.animals:  # should replace with map-reduce?
         animal.listen(my_animal)

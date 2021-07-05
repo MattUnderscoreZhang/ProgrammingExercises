@@ -1,16 +1,16 @@
 from typing import NamedTuple, Callable
 
 
-class Animal(NamedTuple):
+class Animal(NamedTuple):  # centralized location for type definitions?
     name: str
-    speak: Callable[None, None]
+    speak: Callable[None, None]  # note function does not take Animal as an input
 
 
 def listen(animal: Animal) -> None:
-    animal.speak()
+    animal.speak()  # attaching function to object?
 
 
-def init_lion() -> None:
+def init_lion() -> None:  # initialization method is reasonable?
     return Animal("lion",
                   lambda: print("ROAR"))
 
