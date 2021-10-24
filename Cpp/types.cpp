@@ -37,4 +37,16 @@ int main() {
     cout << d_bits << endl;
     short e = *(short*)&d;  // Mac is little-endian
     cout << e << endl;
+
+    struct fraction {
+        int num;
+        int denom;
+    };
+    fraction f = {3, 5};
+    cout << f.num << ", " << f.denom << endl;
+    cout << &(f.num) << ", " << &(f.denom) << endl;
+    int* g = (int*)&f;
+    cout << g << ", " << g+1 << endl;
+    cout << *g << ", " << *(g+1) << endl;
+    cout << *g << ", " << *(((int*)&f)+1) << endl;
 }
