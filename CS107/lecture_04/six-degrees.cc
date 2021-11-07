@@ -52,6 +52,50 @@ static string promptForActor(const string& prompt, const imdb& db)
  * @return 0 if the program ends normally, and undefined otherwise.
  */
 
+static path generateShortestPath(const imdb& db, string& actor1, string& actor2) {
+    list<path> actor1_paths;
+    actor1_paths.push_back(path(actor1));
+    list<path> actor2_paths;
+    actor2_paths.push_back(path(actor2));
+
+    set<film> seen_films;
+    set<string> seen_actors;
+    seen_actors.insert(actor1);
+    seen_actors.insert(actor2);
+
+    int max_length = 7;
+    while (true) {
+        path next_path = actor1_paths.front();
+        actor1_paths.pop_front();
+        if (next_path.getLength() >= max_length)
+            break;
+
+        const string& actor = next_path.getLastPlayer();
+        vector<film> linked_films;
+        db.getCredits(actor, linked_films);
+        for (film linked_film : linked_films) {
+            if (seen_films.find(linked_film) == seen_films.end()) {
+                seen_films.insert(linked_film);
+                vector<string> linked_actors;
+                db.getCast(linked_film, linked_actors);
+                for (string linked_actor : linked_actors) {
+                    path new_path = next_path;
+                    new_path.addConnection(linked_film, linked_actor);
+                    if (seen_actors.find(linked_actor) == seen_actors.end()) {
+                        seen_actors.insert(linked_actor);
+                        actor1_paths.push_back(new_path);
+                    }
+                    else if (linked_actor.compare(actor2) == 0) {
+                        return new_path;
+                    }
+                }
+            }
+        }
+    }
+
+    return path(actor1);
+}
+
 int main(int argc, const char *argv[])
 {
   (void)argc;
@@ -73,7 +117,11 @@ int main(int argc, const char *argv[])
       cout << "Good one.  This is only interesting if you specify two different people." << endl;
     } else {
       // replace the following line by a call to your generateShortestPath routine... 
-      cout << endl << "No path between those two people could be found." << endl << endl;
+      path shortest_path = generateShortestPath(db, source, target);
+      if (shortest_path.getLength() == 0)
+          cout << endl << "No path between those two people could be found." << endl << endl;
+      else
+          cout << shortest_path << endl;
     }
   }
   
