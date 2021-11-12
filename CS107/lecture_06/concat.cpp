@@ -45,13 +45,13 @@ char* ConcatStrings(const char* string_a, const char* string_b) {
 
 char* ConcatAll(nodeType *node) { 
     switch (*node) {
-        case String: return *(char**)(node + 2); // this doesn't work right because of padding or something
+        case String: return *(char**)(node + 2); // all memory indices count by 2's for some reason due to structs
         case Integer:
         case Nil: return strdup("");
         case List: {
-            char* result = ConcatAll(node + 1);
-            if (node + 2 != NULL) {
-                char* next_node_string = ConcatAll(node + 2);
+            char* result = ConcatAll(*(nodeType**)(node + 2));
+            if (*(nodeType**)(node + 4) != NULL) {
+                char* next_node_string = ConcatAll(*(nodeType**)(node + 4));
                 result = ConcatStrings(result, next_node_string);
                 free(next_node_string);
             }
@@ -60,7 +60,8 @@ char* ConcatAll(nodeType *node) {
     }
 }
 
-int main(int argc, char* argv[]) {
+void test_1() {
+    // (Yankees 2 Diamondbacks 1)
     nilEndNode endNode0 = (nilEndNode){Nil};
     integerEndNode endNode1 = (integerEndNode){Integer, 1};
     stringEndNode endNode2 = (stringEndNode){String, strdup("Diamondbacks")};
@@ -75,22 +76,36 @@ int main(int argc, char* argv[]) {
 
     char* result = ConcatAll(gameThree);
     cout << result << endl;
-    cout << ConcatAll(&endNode2.type) << endl;
     free(result);
+}
 
-    //cout << sizeof(nodeType) << endl;
-    //cout << &(endNode2.type) << endl;
-    //cout << &(endNode2.type) + 2 << endl;
-    //cout << &(endNode2.content) << " " << endNode2.content << endl;
+void test_2() {
+    // (one (2 (three 4)) 5 six)
+    nilEndNode endNode0 = (nilEndNode){Nil};
+    stringEndNode endNode1 = (stringEndNode){String, strdup("six")};
+    integerEndNode endNode2 = (integerEndNode){Integer, 5};
+    nilEndNode endNode3_0_0 = (nilEndNode){Nil};
+    integerEndNode endNode3_0_1 = (integerEndNode){Integer, 4};
+    stringEndNode endNode3_0_2 = (stringEndNode){String, strdup("three")};
+    integerEndNode endNode3_1 = (integerEndNode){Integer, 2};
+    stringEndNode endNode4 = (stringEndNode){String, strdup("one")};
+    listNode node0 = (listNode){List, &endNode0.type, NULL};
+    listNode node1 = (listNode){List, &endNode1.type, &node0.type};
+    listNode node2 = (listNode){List, &endNode2.type, &node1.type};
+    listNode node3_0_0 = (listNode){List, &endNode3_0_0.type, NULL};
+    listNode node3_0_1 = (listNode){List, &endNode3_0_1.type, &node3_0_0.type};
+    listNode node3_0_2 = (listNode){List, &endNode3_0_2.type, &node3_0_1.type};
+    listNode node3_1 = (listNode){List, &node3_0_2.type, NULL};
+    listNode node3 = (listNode){List, &node3_1.type, &node2.type};
+    listNode node4 = (listNode){List, &endNode4.type, &node3.type};
+    nodeType* nestedNumbers = &node4.type;
 
-    //listNode node0 = listNode{List, &nilEndNode{Nil}.type, NULL};
-    //listNode node1 = listNode{List, &stringEndNode{String, "six"}.type, &node0.type};
-    //listNode node2 = listNode{List, &integerEndNode{Integer, 5}.type, &node1.type};
-    //listNode node3 = listNode{List, &integerEndNode{Integer, 2}.type, &node2.type};
-    //listNode node4 = listNode{List, &stringEndNode{String, "Yankees"}.type, &node3.type};
-    //listNode node5 = listNode{List, &stringEndNode{String, "Yankees"}.type, &node3.type};
-    //listNode node6 = listNode{List, &stringEndNode{String, "Yankees"}.type, &node3.type};
-    //nodeType* gameThree = &node4.type;
-    //{one {2 {three 4}} 5 six};
-    //cout << ConcatAll(nestedNumbers) << endl;
+    char* result = ConcatAll(nestedNumbers);
+    cout << result << endl;
+    free(result);
+}
+
+int main(int argc, char* argv[]) {
+    test_1();
+    test_2();
 }
