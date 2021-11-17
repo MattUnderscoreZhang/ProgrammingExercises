@@ -68,7 +68,12 @@ typedef void (*VectorFreeFunction)(void *elemAddr);
  */
 
 typedef struct {
-  // to be filled in by you
+    // to be filled in by you
+    int maxElems;
+    int nElems;
+    int elemSize;
+    void* elems;
+    VectorFreeFunction freeFn;
 } vector;
 
 /** 
@@ -144,7 +149,7 @@ void VectorDispose(vector *v);
  */
 
 int VectorLength(const vector *v);
-	   
+
 /**
  * Method: VectorNth
  * -----------------
@@ -162,7 +167,7 @@ int VectorLength(const vector *v);
  */ 
 
 void *VectorNth(const vector *v, int position);
-					  
+
 /**
  * Function: VectorInsert
  * ----------------------
@@ -187,7 +192,7 @@ void VectorInsert(vector *v, const void *elemAddr, int position);
  */
 
 void VectorAppend(vector *v, const void *elemAddr);
-  
+
 /**
  * Function: VectorReplace
  * -----------------------
@@ -218,7 +223,7 @@ void VectorReplace(vector *v, const void *elemAddr, int position);
  */
 
 void VectorDelete(vector *v, int position);
-  
+
 /* 
  * Function: VectorSearch
  * ----------------------
