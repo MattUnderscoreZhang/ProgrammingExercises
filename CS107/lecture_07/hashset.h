@@ -73,7 +73,13 @@ typedef void (*HashSetFreeFunction)(void *elemAddr);
  */
 
 typedef struct {
-  // to be filled in by you
+    // to be filled in by you
+    int elemSize;
+    int nBuckets;
+    HashSetHashFunction hashFn;
+    HashSetCompareFunction compareFn;
+    vector elemVectors;
+    int nElems;
 } hashset;
 
 /**
@@ -116,7 +122,7 @@ typedef struct {
  */
 
 void HashSetNew(hashset *h, int elemSize, int numBuckets, 
-		HashSetHashFunction hashfn, HashSetCompareFunction comparefn, HashSetFreeFunction freefn);
+        HashSetHashFunction hashfn, HashSetCompareFunction comparefn, HashSetFreeFunction freefn);
 
 /**
  * Function: HashSetDispose
@@ -195,5 +201,5 @@ void *HashSetLookup(const hashset *h, const void *elemAddr);
  */
 
 void HashSetMap(hashset *h, HashSetMapFunction mapfn, void *auxData);
-     
+
 #endif

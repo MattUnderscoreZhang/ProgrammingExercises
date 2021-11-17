@@ -5,16 +5,12 @@
 #include <string.h>
 #include <assert.h>
 
-static void* GetVectorPtr(vector *v, int i) {
-    return ((char*)v->elems) + v->elemSize * i;
-}
-
 void VectorNew(vector *v, int elemSize, VectorFreeFunction freeFn, int initialAllocation)
 {
-    v->maxElems = 4;
+    v->maxElems = initialAllocation;
     v->nElems = 0;
     v->elemSize = elemSize;
-    v->elems = malloc(4 * elemSize);
+    v->elems = malloc(initialAllocation * elemSize);
     v->freeFn = freeFn;
 }
 
@@ -22,7 +18,7 @@ void VectorDispose(vector *v)
 {
     if (v->freeFn != NULL) {
         for (int i=0; i<v->nElems; i++) {
-            v->freeFn(GetVectorPtr(v, i));
+            v->freeFn(VectorNth(v, i));
         }
     }
     v->nElems = 0;
@@ -35,23 +31,23 @@ int VectorLength(const vector *v)
 
 void *VectorNth(const vector *v, int position)
 {
-    return GetVectorPtr(v, position);
+    return ((char*)v->elems) + v->elemSize * position;
 }
 
 void VectorReplace(vector *v, const void *elemAddr, int position)
 {
     assert(position >= 0 && position < v->nElems);
     if (v->freeFn != NULL)
-        v->freeFn(GetVectorPtr(v, position));
-    memcpy(GetVectorPtr(v, position), elemAddr, v->elemSize);
+        v->freeFn(VectorNth(v, position));
+    memcpy(VectorNth(v, position), elemAddr, v->elemSize);
 }
 
 void VectorInsert(vector *v, const void *elemAddr, int position)
 {
     assert(position >= 0 && position <= v->nElems);
     VectorAppend(v, elemAddr);
-    memmove(GetVectorPtr(v, position+1), GetVectorPtr(v, position), v->elemSize * (v->nElems - position - 1));
-    memcpy(GetVectorPtr(v, position), elemAddr, v->elemSize);
+    memmove(VectorNth(v, position+1), VectorNth(v, position), v->elemSize * (v->nElems - position - 1));
+    memcpy(VectorNth(v, position), elemAddr, v->elemSize);
 }
 
 void VectorAppend(vector *v, const void *elemAddr)
@@ -60,7 +56,7 @@ void VectorAppend(vector *v, const void *elemAddr)
         v->maxElems *= 2;
         v->elems = realloc(v->elems, v->maxElems * v->elemSize);
     }
-    memcpy(GetVectorPtr(v, v->nElems), elemAddr, v->elemSize);
+    memcpy(VectorNth(v, v->nElems), elemAddr, v->elemSize);
     v->nElems++;
 }
 
@@ -68,9 +64,9 @@ void VectorDelete(vector *v, int position)
 {
     assert(position >= 0 && position < v->nElems);
     if (v->freeFn != NULL)
-        v->freeFn(GetVectorPtr(v, position));
+        v->freeFn(VectorNth(v, position));
     v->nElems--; 
-    memmove(GetVectorPtr(v, position), GetVectorPtr(v, position+1), v->elemSize * (v->nElems - position));
+    memmove(VectorNth(v, position), VectorNth(v, position+1), v->elemSize * (v->nElems - position));
 }
 
 void VectorSort(vector *v, VectorCompareFunction compare)
@@ -82,7 +78,7 @@ void VectorMap(vector *v, VectorMapFunction mapFn, void *auxData)
 {
     assert(mapFn != NULL);
     for (int i=0; i<v->nElems; i++) {
-        mapFn(GetVectorPtr(v, i), auxData);
+        mapFn(VectorNth(v, i), auxData);
     }
 }
 
@@ -92,7 +88,7 @@ int VectorSearch(const vector *v, const void *key, VectorCompareFunction searchF
     assert(startIndex >= 0 && startIndex <= v->nElems);
     assert(key != NULL);
     assert(searchFn != NULL);
-    void* searchBase = GetVectorPtr(v, startIndex);
+    void* searchBase = VectorNth(v, startIndex);
     size_t nSearchElems = v->nElems - startIndex;
     void* foundElem = 0;
     if (isSorted)
