@@ -2,19 +2,12 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
 void main() {
-    runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-    const MyApp({Key? key}) : super(key: key);
-
-    @override
-    Widget build(BuildContext context) {
-        return const MaterialApp(
+    runApp(
+        const MaterialApp(
             title: 'Mochi\'s To Do List',
             home: RandomWords(),
-        );
-    }
+        ),
+    );
 }
 
 class RandomWords extends StatefulWidget {
@@ -29,20 +22,35 @@ class _RandomWordsState extends State<RandomWords> {
     final _taskCompleted = <bool>[];
     final _biggerFont = const TextStyle(fontSize: 18.0);
     final _random = math.Random();
-    final List<String> _verbs = ['Hug',
-                                 'Kiss',
-                                 'Wash',
-                                 'Complain to',
-                                 'Sue',
-                                 'Play Golf with',
-                                 'Have Dinner with'];
-    final List<String> _nouns = ['Nibbles',
-                                 'Bella',
-                                 'Coworker',
-                                 'Sister',
-                                 'Mom',
-                                 'Dad',
-                                 'Google Fi'];
+    final List<String> _verbs = [
+        'Hug',
+        'Kiss',
+        'Wash',
+        'Complain to',
+        'Sue',
+        'Play Golf with',
+        'Have Dinner with',
+        'Return Package to',
+        'Talk About Day with',
+        'Feed',
+        'Beat Up',
+        'Ask for Advice from',
+        'Play Hive with',
+    ];
+    final List<String> _nouns = [
+        'Nibbles',
+        'Bella',
+        'Coworker',
+        'Sister',
+        'Mom',
+        'Dad',
+        'Google Fi',
+        'Customer Service',
+        'Nobbles',
+        'Roommate',
+        'Landlord',
+        'Therapist',
+    ];
 
     @override
     Widget build(BuildContext context) {
