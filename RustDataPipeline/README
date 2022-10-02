@@ -1,1 +1,3 @@
 Tutorial from https://betterprogramming.pub/build-a-serverless-data-pipeline-with-rust-and-aws-lambda-ec4e38a0ce9d
+
+This author does not show the full code, which makes this difficult to implement as a first Rust project. I'm stopping partway in the middle, and will probably come back and finish this as an exercise at some point in the future.
