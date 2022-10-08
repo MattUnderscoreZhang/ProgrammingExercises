@@ -51,7 +51,8 @@ Session = sessionmaker(bind=engine)
 session = Session()
 
 # instance is pending, but not yet in the database
-# the database is not touched until we call session.commit() or until the data is used
+# the database is not flushed until we call session.flush() or until the data is used
+# https://stackoverflow.com/questions/4201455/sqlalchemy-whats-the-difference-between-flush-and-commit
 session.add(bella)
 
 # actually returns the same object
@@ -83,6 +84,11 @@ print()
 print("Users:", session.query(User).all())
 print()
 
-# manually commit the changes by flushing the session
+# we can roll back changes until committing
+session.rollback()
+print("Users:", session.query(User).all())
+print()
+
+# flush and commit the changes and make database operations permanent
 # subsequent operations with this session will be in a new transaction and reacquire resources
 session.commit()
