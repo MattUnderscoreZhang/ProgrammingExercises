@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "awslambda"
+version = "0.1.0"
+description = "Testing out AWS Lambda"
+authors = ["Matt Zhang <set.stun@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+
+
+[tool.poetry.group.dev.dependencies]
+awslambdaric = "^2.0.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
