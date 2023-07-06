@@ -1,0 +1,17 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <title>Promise Basics - Delay</title>
+        <meta charset="utf-8">
+    </head>
+    <body>
+        <script>
+            function delay(ms) {
+                return new Promise((resolve, reject) => {
+                    setTimeout(() => resolve(), ms)
+                });
+            }
+            delay(3000).then(() => alert('runs after 3 seconds'));
+        </script>
+    </body>
+</html>

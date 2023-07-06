@@ -1,0 +1,26 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <title>Logical Operators - Check the Login</title>
+        <meta charset="utf-8">
+    </head>
+    <body>
+        <script>
+            let username = prompt("Enter the username");
+            if (!username) {
+                alert("Canceled");
+            } else if (username != "Admin") {
+                alert("I don't know you");
+            } else {
+                let password = prompt("Enter the password");
+                if (!password) {
+                    alert("Canceled");
+                } else if (password != "TheMaster") {
+                    alert("Wrong password");
+                } else {
+                    alert("Welcome!");
+                }
+            }
+        </script>
+    </body>
+</html>
