@@ -1,4 +1,4 @@
-from transformers import BertConfig, BertModel, BertTokenizer
+from transformers import BertConfig, BertModel
 
 
 def randomly_initialize_model():
