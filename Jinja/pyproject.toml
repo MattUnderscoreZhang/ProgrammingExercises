@@ -1,0 +1,17 @@
+[project]
+name = "Jinja"
+version = "0.1.0"
+description = "Default template for PDM package"
+authors = [
+    {name = "Matt Zhang", email = "set.stun@gmail.com"},
+]
+dependencies = [
+    "jinja2>=3.1.4",
+]
+requires-python = "==3.11.*"
+readme = "README.md"
+license = {text = "MIT"}
+
+
+[tool.pdm]
+distribution = false
