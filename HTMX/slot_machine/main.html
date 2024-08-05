@@ -1,0 +1,16 @@
+<html>
+    <head>
+        <script src="https://unpkg.com/htmx.org@1.9.2"
+            integrity="sha384-L6OqL9pRWyyFU3+/bjdSri+iIphTN/bvYyM37tICVyOJkWZLpP2vGn6VUEXgzg6h"
+            crossorigin="anonymous">
+        </script>
+    </head>
+    <body>
+        <button hx-get="/spin_slots" hx-target="#slots" hx-swap="innerHTML">
+            Toggle
+        </button>
+        <div id="slots">
+            <span>Click the button to spin the slots</span>
+        </div>
+    </body>
+</html>
