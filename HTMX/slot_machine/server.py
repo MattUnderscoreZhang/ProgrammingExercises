@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 # from fastapi.templating import Jinja2Templates
 import random
+import uvicorn
 
 
 app = FastAPI()
@@ -36,3 +37,7 @@ async def spin_slots():
         "🤖",
     ]
     return "".join(random.choices(icons, k=3))
+
+
+if __name__ == "__main__":
+    uvicorn.run("server:app", reload=True)
