@@ -1,16 +1,26 @@
+<!doctype html>
 <html>
     <head>
         <script src="https://unpkg.com/htmx.org@1.9.2"
             integrity="sha384-L6OqL9pRWyyFU3+/bjdSri+iIphTN/bvYyM37tICVyOJkWZLpP2vGn6VUEXgzg6h"
             crossorigin="anonymous">
         </script>
+        <link rel="stylesheet" href="../output.css">
     </head>
     <body>
-        <button hx-get="http://localhost:8000/spin_slots" hx-target="#slots">
-            Toggle
-        </button>
-        <div id="slots">
-            <span>Click the button to spin the slots</span>
+        <div class="max-w-sm mx-auto rounded-xl shadow-lg p-6 bg-gray-200 mt-12">
+            <div class="text-center">
+                <button
+                    hx-get="http://localhost:8000/spin_slots"
+                    hx-target="#slots"
+                    class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 mb-8 rounded"
+                >
+                    Spin Slots
+                </button>
+            </div>
+            <div id="slots" class="text-center text-8xl">
+                X X X
+            </div>
         </div>
     </body>
 </html>
