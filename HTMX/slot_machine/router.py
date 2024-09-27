@@ -1,25 +1,21 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
-# from fastapi.templating import Jinja2Templates
+from fastapi.templating import Jinja2Templates
 import random
 import uvicorn
 
 
-app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "null",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-# templates = Jinja2Templates(directory="templates")
+router_prefix = "/slot_machine"
+router = APIRouter(prefix=router_prefix)
+templates = Jinja2Templates(directory="slot_machine")
 
 
-@app.get("/spin_slots", response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse)
+async def slot_machine(request: Request):
+    return templates.TemplateResponse("main.html", {"request": request})
+
+
+@router.get("/spin_slots", response_class=HTMLResponse)
 async def spin_slots():
     icons = [
         "🍒",

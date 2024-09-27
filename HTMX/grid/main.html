@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script src="https://unpkg.com/htmx.org@1.9.2"
+            integrity="sha384-L6OqL9pRWyyFU3+/bjdSri+iIphTN/bvYyM37tICVyOJkWZLpP2vGn6VUEXgzg6h"
+            crossorigin="anonymous">
+        </script>
+        <link rel="stylesheet" href="/assets/css/output.css">
+    </head>
+    <body class="flex flex-col items-center pt-12">
+        <div class="w-[48rem] h-[32rem] p-4 bg-gray-300 grid grid-cols-2 gap-4">
+            <div class="p-4 border-4 overflow-x-scroll">
+                This text is too long for the containing element.
+                aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            </div>
+            <div class="grid grid-rows-3 gap-4">
+                <div class="p-4 border-4 overflow-x-scroll">
+                    <div>
+                        This text is too long for the containing element.
+                    </div>
+                    <div>
+                        aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                    </div>
+                </div>
+                <div class="p-4 border-4 overflow-x-scroll">
+                    This text is too long for the containing element.
+                    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                </div>
+            </div>
+        </div>
+    </body>
+</html>
