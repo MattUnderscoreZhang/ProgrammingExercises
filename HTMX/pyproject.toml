@@ -6,7 +6,7 @@ authors = [
     {name = "Matt Zhang", email = "set.stun@gmail.com"},
 ]
 dependencies = [
-    "fastapi[standard]>=0.112.0",
+    "fastapi>=0.112.2",
     "uvicorn>=0.30.5",
     "pydantic>=2.8.2",
 ]
