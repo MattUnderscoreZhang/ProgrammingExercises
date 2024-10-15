@@ -1,0 +1,104 @@
+from dataclasses import dataclass
+import random
+import torch
+from torch import nn
+
+from ttt_rl.game import GameState, GameStatus, init_game_state, make_move
+
+
+def get_observation(game_state: GameState):
+    return torch.tensor([
+        space_state.value
+        for game_row in game_state.board
+        for space_state in game_row
+    ])
+
+
+class NeuralNet(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        n_hidden_layers = 128
+        self.model = torch.nn.Sequential(
+            torch.nn.Linear(9, n_hidden_layers),
+            torch.nn.ReLU(),
+            torch.nn.Linear(n_hidden_layers, n_hidden_layers),
+            torch.nn.ReLU(),
+            torch.nn.Linear(n_hidden_layers, n_hidden_layers),
+            torch.nn.ReLU(),
+            torch.nn.Linear(n_hidden_layers, 2),
+        )
+
+    def forward(self, observation: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        row_and_col = self.model(observation)
+        return row_and_col[0], row_and_col[1]
+
+
+@dataclass
+class Memory:
+    observation: torch.Tensor
+    row: int
+    col: int
+    reward: float
+    next_observation: torch.Tensor
+
+
+class MemoryBuffer:
+    def __init__(self):
+        self.memories = []
+
+    def add_memory(self, memory: Memory):
+        self.memories.append(memory)
+
+    def sample(self, n_samples: int):
+        return random.sample(self.memories, n_samples)
+
+
+def play_and_record_game(model: NeuralNet, memory_buffer: MemoryBuffer) -> MemoryBuffer:
+    game_state = init_game_state()
+    while game_state.game_status == GameStatus.IN_PROGRESS:
+        observation = get_observation(game_state)
+        row, col = model(observation)
+        game_state = make_move(game_state, row, col)
+        memory_buffer.add_memory(
+            Memory(
+                observation=observation,
+                row=row,
+                col=col,
+                reward=(
+                    1 if game_state.game_status == GameStatus.X_WIN or GameStatus.O_WIN
+                    else 0
+                ),
+                next_observation=get_observation(game_state),
+            )
+        )
+    return memory_buffer
+
+
+def train():
+    n_games_in_epoch = 100
+    n_burn_in_epochs = 100
+    n_epochs = 100_000
+    memory_batch = 512
+
+    model = NeuralNet()
+    memory_buffer = MemoryBuffer()
+    optimizer = torch.optim.adam.Adam(model.parameters())
+    loss_fn = nn.MSELoss()
+
+    for _ in range(n_burn_in_epochs):
+        for _ in range(n_games_in_epoch):
+            memory_buffer = play_and_record_game(model, memory_buffer)
+
+    for _ in range(n_epochs):
+        for _ in range(n_games_in_epoch):
+            memory_buffer = play_and_record_game(model, memory_buffer)
+        for memories in memory_buffer.sample(memory_batch):
+            observations = torch.stack([memory.observation for memory in memories])
+            rows = torch.tensor([memory.row for memory in memories])
+            cols = torch.tensor([memory.col for memory in memories])
+            rewards = torch.tensor([memory.reward for memory in memories])
+            next_observations = torch.stack([memory.next_observation for memory in memories])
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
