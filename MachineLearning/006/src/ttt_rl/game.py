@@ -62,7 +62,9 @@ def check_game_status(board: list[list[SpaceState]]) -> GameStatus:
     return GameStatus.IN_PROGRESS
 
 
-def make_move(game_state: GameState, row: int, col: int) -> GameState:
+def make_move(game_state: GameState, action: int) -> GameState:
+    row = action // 3
+    col = action % 3
     new_board = game_state.board
     if new_board[row][col] != SpaceState.EMPTY:
         raise ValueError("Invalid move")
