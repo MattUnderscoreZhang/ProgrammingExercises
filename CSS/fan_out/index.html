@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Fan Out</title>
+    <meta name="author" content="Matt Zhang">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        @property --item-height {
+            syntax: '<length>';
+            inherits: false;
+            initial-value: 0px;
+        }
+
+        @keyframes open { to { --item-height: 60px; } }
+        @keyframes close { to { --item-height: 0px; } }
+
+        .items-container {
+            display: grid;
+            grid-template-rows: repeat(4, var(--item-height));
+            transition: row-gap .3s .1s cubic-bezier(.8, .5, .2, 1.4);
+            &:has(.open :checked) {
+                animation: open .3s ease-in-out forwards;
+                .open { display: none; }
+                row-gap: 10px;
+                .items { color: rgb(113 124 158); transition: color .3s .1s; }
+                .close { color: black }
+            }
+            &:has(.close :checked) {
+                --item-height: 60px;
+                animation: close .3s ease-in-out forwards;
+                .close { display: none; }
+                row-gap: 0px;
+                .items { color: transparent; transition: color .2s; }
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <section class="items-container">
+        <label class="items close">
+            Close TODO list<input type="radio" name="radio">
+        </label>
+        <label class="items open">
+            Show TODO list<input type="radio" name="radio">
+        </label>
+        <p class="items">Pet Bella</p>
+        <p class="items">Feed Bella</p>
+        <p class="items">Walk Bella</p>
+        <p class="items">Love Bella</p>
+    </section>
+</body>
+
+</html>
