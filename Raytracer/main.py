@@ -158,7 +158,7 @@ def intersect_rays(
         - normal vector of intersected face
     Negative times indicate no intersection.
     """
-    intersection_times = torch.full(size=(ray_positions.size(0),), fill_value=-1.0, device=ray_positions.device)
+    intersection_times = torch.full((ray_positions.size(0),), -1.0, device=ray_positions.device)
     closest_normals = torch.zeros_like(ray_positions)
 
     # how long does it take each ray to intersect each face?
@@ -168,7 +168,7 @@ def intersect_rays(
     ray_dt_faces = ray_d_perp_faces / ray_v_perp_faces
 
     # where would each ray intersect each face?
-    invalid_mask &= (ray_dt_faces > 0)  # negative times indicate no intersection
+    invalid_mask *= (ray_dt_faces > 0)  # negative times indicate no intersection
     ray_dt_faces = ray_dt_faces * invalid_mask  # no need to calculate non-intersections
     ray_final_positions = (
         ray_positions.unsqueeze(2) +
@@ -184,7 +184,7 @@ def intersect_rays(
         (ray_final_bs >= face_b_mins) *
         (ray_final_bs <= face_b_maxes)
     )
-    invalid_mask &= within_bounds
+    invalid_mask *= within_bounds
 
     # find closest intersections
     ray_dt_faces = torch.where(
@@ -210,10 +210,12 @@ def main():
     print(f"Using device: {device}")
 
     # populate scene
-    n_rays = 30000
+    n_rays_per_event = 30000
+    n_events = 1
+    n_rays = n_rays_per_event * n_events
     rays = [
         Ray(
-            position=Vector(*[random.random() * 10 for _ in range(3)]),
+            position=Vector(*[random.random() * 8 + 1 for _ in range(3)]),
             velocity=Vector(*[random.random() * 2 - 1 for _ in range(3)])
         )
         for _ in range(n_rays)
@@ -235,7 +237,7 @@ def main():
         ZRect(x_min=4, x_max=6, y_min=4, y_max=6, z=6),
     ]
     elements = [
-        RectElement(face=face, reflectivity=1.0)
+        RectElement(face=face, reflectivity=0.95)
         for face in wall_faces
     ] + [
         RectElement(face=face, reflectivity=0.0)
@@ -255,16 +257,26 @@ def main():
     face_b_vecs = torch.stack([face.in_plane_b for face in face_tensors], dim=1)
     face_b_mins = torch.stack([face.b_min for face in face_tensors])
     face_b_maxes = torch.stack([face.b_max for face in face_tensors])
+    face_reflectivities = torch.tensor(
+        [element.reflectivity for element in elements],
+        device=device,
+    )
 
     # raytracing loop
+    absorption_indices = torch.full((n_rays,), -2, device=device)  # -2 = in flight, -1 = lost
+    absorption_times = torch.full((n_rays,), -1.0, device=device)
+    done_mask = torch.full((n_rays,), True, device=device)
     max_bounces = 100
     for bounce in range(max_bounces):
-        if len(ray_positions) == 0:
+        # 0.2 ms
+        n_photons_remaining = int(torch.sum(done_mask).item())
+        if not n_photons_remaining:
             break
 
+        # 3.25 ms
         intersection_times, closest_indices, closest_normals = intersect_rays(
-            ray_positions,
-            ray_velocities,
+            ray_positions[done_mask],
+            ray_velocities[done_mask],
             face_normals,
             face_d_origins,
             face_a_vecs,
@@ -275,53 +287,72 @@ def main():
             face_b_maxes,
         )
 
-        # rays that hit nothing are lost
-        hit_mask = intersection_times > 0
-        ray_times = ray_times[hit_mask]
-        ray_positions = ray_positions[hit_mask]
-        ray_velocities = ray_velocities[hit_mask]
-        intersection_times = intersection_times[hit_mask]
-        closest_indices = closest_indices[hit_mask]
-        closest_normals = closest_normals[hit_mask]
+        # 0.15 ms
+        # rays that hit an absorber or nothing are lost
+        absorbed_mask = torch.rand(n_photons_remaining, device=device) < face_reflectivities[closest_indices]
+        lost_mask = intersection_times > 0
+        new_mask = absorbed_mask * lost_mask
 
-        # check whether rays absorb or reflect
-        hit_reflectivities = torch.tensor(
-            [elements[i].reflectivity for i in closest_indices],
-            device=device,
-        )
-        does_absorb = torch.rand(int(hit_mask.sum()), device=device) > hit_reflectivities
-
-        # propagate rays
-        ray_positions += ray_velocities * intersection_times.unsqueeze(1)
-        ray_times += intersection_times
-
+        # 2.2 ms
         # absorb rays
-        for i, hit_i in enumerate(closest_indices):
-            if does_absorb[i]:
-                elements[hit_i].absorbed_times.append(ray_times[i].item())
-        ray_times = ray_times[~does_absorb]
-        ray_positions = ray_positions[~does_absorb]
-        ray_velocities = ray_velocities[~does_absorb]
-        intersection_times = intersection_times[~does_absorb]
-        closest_indices = closest_indices[~does_absorb]
-        closest_normals = closest_normals[~does_absorb]
+        new_absorbed_indices = torch.where(done_mask)[0][~absorbed_mask]
+        absorption_indices[new_absorbed_indices] = closest_indices[~absorbed_mask]
+        absorption_times[new_absorbed_indices] = ray_times[new_absorbed_indices]
 
+        # 1.2 ms
+        # lose rays
+        unmasked_indices = torch.where(done_mask)[0]
+        new_lost_indices = unmasked_indices[~lost_mask]
+        absorption_indices[new_lost_indices] = -1
+
+        # 0.75 ms
+        # update full mask
+        done_mask[unmasked_indices[~new_mask]] = False
+
+        # 5.3 ms
+        # propagate rays
+        ray_positions[done_mask] += (
+            ray_velocities[done_mask] *
+            (intersection_times[new_mask] - 1e-5).unsqueeze(1)  # avoid tunneling
+        )
+        ray_times[done_mask] += intersection_times[new_mask]
+
+        # 4 ms
         # reflect ray_velocities using face normals: R = V - 2 * (V · N) * N
         dot_product = torch.sum(
-            ray_velocities * closest_normals,
+            ray_velocities[done_mask] * closest_normals[new_mask],
             dim=1,
             keepdim=True,
         )
-        ray_velocities -= 2 * dot_product * closest_normals
+        ray_velocities[done_mask] -= 2 * dot_product * closest_normals[new_mask]
+
+    # 11.8 ms
+    # fill absorption times
+    for i, element in enumerate(elements):
+        element.absorbed_times = absorption_times[absorption_indices == i].tolist()
 
     # results
-    print(f"Simulation finished after {bounce + 1} bounces")
+    print(f"Simulation finished after {bounce + 1} bounces")  # type: ignore
     print("Absorption:")
     print("\n".join(
-        f"Face {i}: {len(elements[i].absorbed_times)} absorbed rays"
+        f"\tFace {i}: {len(elements[i].absorbed_times)} absorbed rays"
         for i in range(len(elements))
     ))
+    print(f"Lost rays: {torch.sum(absorption_indices == -1)}")
+    print(f"Rays in flight: {torch.sum(done_mask)}")
 
 
 if __name__ == "__main__":
+    """
+    How can I make this faster?
+    """
     main()
+
+    # # timing tests
+    # import timeit
+    # def my_function():
+        # main()
+    # n_trials = 1000
+    # execution_time = timeit.timeit(my_function, number=n_trials)
+    # print(f"Execution time: {execution_time*1000/n_trials:.5f} ms")
+    # breakpoint()
