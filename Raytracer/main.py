@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 import math
 import random
 import torch
-from torch.backends import mps
 
 
 @dataclass
@@ -139,17 +138,43 @@ class RectFaceTensor:
         )
 
 
+class TensorizedGeometry:
+    def __init__(self, elements: list[RectElement], device: torch.device):
+        face_tensors = [element.face.tensor().to(device) for element in elements]
+        self.face_normals = torch.stack([face.normal for face in face_tensors], dim=1)
+        self.face_d_origins = torch.stack([face.d_origin for face in face_tensors])
+        self.face_a_vecs = torch.stack([face.in_plane_a for face in face_tensors], dim=1)
+        self.face_a_mins = torch.stack([face.a_min for face in face_tensors])
+        self.face_a_maxes = torch.stack([face.a_max for face in face_tensors])
+        self.face_b_vecs = torch.stack([face.in_plane_b for face in face_tensors], dim=1)
+        self.face_b_mins = torch.stack([face.b_min for face in face_tensors])
+        self.face_b_maxes = torch.stack([face.b_max for face in face_tensors])
+        self.face_reflectivities = torch.tensor(
+            [element.reflectivity for element in elements],
+            device=device,
+        )
+
+
+@dataclass
+class TensorizedRays:
+    n_rays: int
+    ray_times: torch.Tensor
+    ray_positions: torch.Tensor
+    ray_velocities: torch.Tensor
+
+
+def generate_tensorized_rays(n_rays: int, device: torch.device) -> TensorizedRays:
+    return TensorizedRays(
+        n_rays = n_rays,
+        ray_times = torch.zeros((n_rays,), device=device),
+        ray_positions = torch.rand((n_rays, 3), device=device) * 8 + 1,
+        ray_velocities = torch.rand((n_rays, 3), device=device) * 2 - 1,
+    )
+
+
 def intersect_rays(
-    ray_positions: torch.Tensor,
-    ray_velocities: torch.Tensor,
-    face_normals: torch.Tensor,
-    face_d_origins: torch.Tensor,
-    face_a_vecs: torch.Tensor,
-    face_a_mins: torch.Tensor,
-    face_a_maxes: torch.Tensor,
-    face_b_vecs: torch.Tensor,
-    face_b_mins: torch.Tensor,
-    face_b_maxes: torch.Tensor,
+    r: TensorizedRays,
+    g: TensorizedGeometry,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Return the following for each ray in the scene:
@@ -158,34 +183,34 @@ def intersect_rays(
         - normal vector of intersected face
     Negative times indicate no intersection.
     """
-    intersection_times = torch.full((ray_positions.size(0),), -1.0, device=ray_positions.device)
-    closest_normals = torch.zeros_like(ray_positions)
+    hit_times = torch.full((r.ray_positions.size(0),), -1.0, device=r.ray_positions.device)  # 0.03 ms
+    closest_normals = torch.zeros_like(r.ray_positions)  # 0.004 ms
 
     # how long does it take each ray to intersect each face?
-    ray_v_perp_faces = torch.matmul(ray_velocities, face_normals)
-    invalid_mask = ray_v_perp_faces != 0
-    ray_d_perp_faces = face_d_origins - torch.matmul(ray_positions, face_normals)
-    ray_dt_faces = ray_d_perp_faces / ray_v_perp_faces
+    ray_v_perp_faces = torch.matmul(r.ray_velocities, g.face_normals)  # 26 ms
+    ray_d_perp_faces = g.face_d_origins - torch.matmul(r.ray_positions, g.face_normals)  # 30 ms
+    ray_dt_faces = ray_d_perp_faces / ray_v_perp_faces  # 0.27 ms
 
     # where would each ray intersect each face?
-    invalid_mask *= (ray_dt_faces > 0)  # negative times indicate no intersection
-    ray_dt_faces = ray_dt_faces * invalid_mask  # no need to calculate non-intersections
-    ray_final_positions = (
-        ray_positions.unsqueeze(2) +
-        ray_velocities.unsqueeze(2) * ray_dt_faces.unsqueeze(1)
+    invalid_mask = (ray_v_perp_faces != 0) * (ray_dt_faces > 0)  # 0.89 ms
+    ray_dt_faces = ray_dt_faces * invalid_mask  # 0.29 ms - no need to calculate non-intersections
+    ray_final_positions = (  # 0.61 ms
+        r.ray_positions.unsqueeze(2) +
+        r.ray_velocities.unsqueeze(2) * ray_dt_faces.unsqueeze(1)
     )
 
+    # 6.3 ms
     # check if intersection points are inside the face
-    ray_final_as = torch.einsum("ijk,jk->ik", ray_final_positions, face_a_vecs)
-    ray_final_bs = torch.einsum("ijk,jk->ik", ray_final_positions, face_b_vecs)
-    within_bounds = (
-        (ray_final_as >= face_a_mins) *
-        (ray_final_as <= face_a_maxes) *
-        (ray_final_bs >= face_b_mins) *
-        (ray_final_bs <= face_b_maxes)
+    ray_final_as = torch.einsum("ijk,jk->ik", ray_final_positions, g.face_a_vecs)  # 0.09 ms
+    ray_final_bs = torch.einsum("ijk,jk->ik", ray_final_positions, g.face_b_vecs)  # 0.09 ms
+    invalid_mask *= (  # 120 ms
+        (ray_final_as >= g.face_a_mins) &
+        (ray_final_as <= g.face_a_maxes) &
+        (ray_final_bs >= g.face_b_mins) &
+        (ray_final_bs <= g.face_b_maxes)
     )
-    invalid_mask *= within_bounds
 
+    # 16.5 ms
     # find closest intersections
     ray_dt_faces = torch.where(
         invalid_mask,
@@ -193,33 +218,92 @@ def intersect_rays(
         torch.tensor(float("inf"), device=ray_dt_faces.device),
     )
     closest_indices = torch.argmin(ray_dt_faces, dim=1)
-    closest_normals = face_normals.t()[closest_indices]
-    intersection_times = ray_dt_faces[torch.arange(ray_dt_faces.size(0)), closest_indices]
+    closest_normals = g.face_normals.t()[closest_indices]
+    hit_times = ray_dt_faces[torch.arange(ray_dt_faces.size(0)), closest_indices]
     no_intersections = torch.all(~invalid_mask, dim=1)
-    intersection_times[no_intersections] = -1
+    hit_times[no_intersections] = -1
 
-    return intersection_times, closest_indices, closest_normals
+    return hit_times, closest_indices, closest_normals
+
+
+def raytrace_event(
+    geometry: TensorizedGeometry,
+    rays: TensorizedRays,
+    device: torch.device,
+) -> tuple[int, torch.Tensor, torch.Tensor, torch.Tensor]:
+    # 0.73 ms
+    absorption_indices = torch.full((rays.n_rays,), -2, device=device)  # -2 = in flight, -1 = lost
+    absorption_times = torch.full((rays.n_rays,), -1.0, device=device)
+    done_mask = torch.full((rays.n_rays,), True, device=device)
+    max_bounces = 100
+
+    # 87 ms per loop - aim for 50 ms
+    for bounce in range(max_bounces):
+        # 0.2 ms
+        n_photons_remaining = int(torch.sum(done_mask).item())
+        if not n_photons_remaining:
+            break
+
+        # 37 ms
+        print("Intersecting rays")
+        hit_times, closest_indices, closest_normals = intersect_rays(rays, geometry)
+
+        # 0.15 ms
+        # rays that hit an absorber or nothing are lost
+        absorbed_mask = torch.rand(n_photons_remaining, device=device) < geometry.face_reflectivities[closest_indices]
+        lost_mask = hit_times > 0
+        new_mask = absorbed_mask * lost_mask
+
+        # 2.2 ms
+        # absorb rays
+        new_absorbed_indices = torch.where(done_mask)[0][~absorbed_mask]
+        absorption_indices[new_absorbed_indices] = closest_indices[~absorbed_mask]
+        absorption_times[new_absorbed_indices] = rays.ray_times[~absorbed_mask]
+
+        # 1.2 ms
+        # lose rays
+        unmasked_indices = torch.where(done_mask)[0]
+        new_lost_indices = unmasked_indices[~lost_mask]
+        absorption_indices[new_lost_indices] = -1
+
+        # 4.7 ms
+        # update full mask
+        done_mask[unmasked_indices[~new_mask]] = False  # 0.8 ms
+        rays.ray_positions = rays.ray_positions[new_mask]  # 0.8 ms
+        rays.ray_velocities = rays.ray_velocities[new_mask]  # 0.8 ms
+        rays.ray_times = rays.ray_times[new_mask]  # 0.8 ms
+        hit_times = hit_times[new_mask]  # 0.8 ms
+        closest_normals = closest_normals[new_mask]  # 0.8 ms
+
+        # 0.08 ms
+        # propagate rays
+        rays.ray_positions += (
+            rays.ray_velocities *
+            (hit_times - 1e-5).unsqueeze(1)  # avoid tunneling
+        )
+        rays.ray_times += hit_times
+
+        # 0.1 ms
+        # reflect ray_velocities using face normals: R = V - 2 * (V · N) * N
+        dot_product = torch.sum(
+            rays.ray_velocities * closest_normals,
+            dim=1,
+            keepdim=True,
+        )
+        rays.ray_velocities -= 2 * dot_product * closest_normals
+
+    return bounce, absorption_indices, absorption_times, done_mask  # type: ignore
 
 
 def main():
+    # do not use MPS! unreliable (wrong calculations) and slow
     device = torch.device(
-        "mps" if mps.is_built()
-        else "cuda" if torch.cuda.is_available()
+        "cuda" if torch.cuda.is_available()
         else "cpu"
     )
     print(f"Using device: {device}")
 
     # populate scene
-    n_rays_per_event = 30000
-    n_events = 1
-    n_rays = n_rays_per_event * n_events
-    rays = [
-        Ray(
-            position=Vector(*[random.random() * 8 + 1 for _ in range(3)]),
-            velocity=Vector(*[random.random() * 2 - 1 for _ in range(3)])
-        )
-        for _ in range(n_rays)
-    ]
     wall_faces = [
         XRect(x=0, y_min=0, y_max=10, z_min=0, z_max=10),
         XRect(x=10, y_min=0, y_max=10, z_min=0, z_max=10),
@@ -243,90 +327,22 @@ def main():
         RectElement(face=face, reflectivity=0.0)
         for face in absorber_faces
     ]
+    geometry = TensorizedGeometry(elements, device)
 
-    # transfer to GPU
-    ray_times = torch.zeros(n_rays, device=device)
-    ray_positions = torch.stack([ray.position.tensor() for ray in rays]).to(device)
-    ray_velocities = torch.stack([ray.velocity.tensor() for ray in rays]).to(device)
-    face_tensors = [element.face.tensor().to(device) for element in elements]
-    face_normals = torch.stack([face.normal for face in face_tensors], dim=1)
-    face_d_origins = torch.stack([face.d_origin for face in face_tensors])
-    face_a_vecs = torch.stack([face.in_plane_a for face in face_tensors], dim=1)
-    face_a_mins = torch.stack([face.a_min for face in face_tensors])
-    face_a_maxes = torch.stack([face.a_max for face in face_tensors])
-    face_b_vecs = torch.stack([face.in_plane_b for face in face_tensors], dim=1)
-    face_b_mins = torch.stack([face.b_min for face in face_tensors])
-    face_b_maxes = torch.stack([face.b_max for face in face_tensors])
-    face_reflectivities = torch.tensor(
-        [element.reflectivity for element in elements],
-        device=device,
-    )
+    # raytrace all events simultaneously
+    n_rays_per_event = 30_000
+    n_events = 1_000
+    n_rays = n_rays_per_event * n_events
 
-    # raytracing loop
-    absorption_indices = torch.full((n_rays,), -2, device=device)  # -2 = in flight, -1 = lost
-    absorption_times = torch.full((n_rays,), -1.0, device=device)
-    done_mask = torch.full((n_rays,), True, device=device)
-    max_bounces = 100
-    for bounce in range(max_bounces):
-        # 0.2 ms
-        n_photons_remaining = int(torch.sum(done_mask).item())
-        if not n_photons_remaining:
-            break
+    # 1.5 ms
+    rays = generate_tensorized_rays(n_rays, device)
 
-        # 3.25 ms
-        intersection_times, closest_indices, closest_normals = intersect_rays(
-            ray_positions[done_mask],
-            ray_velocities[done_mask],
-            face_normals,
-            face_d_origins,
-            face_a_vecs,
-            face_a_mins,
-            face_a_maxes,
-            face_b_vecs,
-            face_b_mins,
-            face_b_maxes,
-        )
-
-        # 0.15 ms
-        # rays that hit an absorber or nothing are lost
-        absorbed_mask = torch.rand(n_photons_remaining, device=device) < face_reflectivities[closest_indices]
-        lost_mask = intersection_times > 0
-        new_mask = absorbed_mask * lost_mask
-
-        # 2.2 ms
-        # absorb rays
-        new_absorbed_indices = torch.where(done_mask)[0][~absorbed_mask]
-        absorption_indices[new_absorbed_indices] = closest_indices[~absorbed_mask]
-        absorption_times[new_absorbed_indices] = ray_times[new_absorbed_indices]
-
-        # 1.2 ms
-        # lose rays
-        unmasked_indices = torch.where(done_mask)[0]
-        new_lost_indices = unmasked_indices[~lost_mask]
-        absorption_indices[new_lost_indices] = -1
-
-        # 0.75 ms
-        # update full mask
-        done_mask[unmasked_indices[~new_mask]] = False
-
-        # 5.3 ms
-        # propagate rays
-        ray_positions[done_mask] += (
-            ray_velocities[done_mask] *
-            (intersection_times[new_mask] - 1e-5).unsqueeze(1)  # avoid tunneling
-        )
-        ray_times[done_mask] += intersection_times[new_mask]
-
-        # 4 ms
-        # reflect ray_velocities using face normals: R = V - 2 * (V · N) * N
-        dot_product = torch.sum(
-            ray_velocities[done_mask] * closest_normals[new_mask],
-            dim=1,
-            keepdim=True,
-        )
-        ray_velocities[done_mask] -= 2 * dot_product * closest_normals[new_mask]
+    # 6.1 s
+    print("ray tracing")
+    bounce, absorption_indices, absorption_times, done_mask = raytrace_event(geometry, rays, device)
 
     # 11.8 ms
+    print("absorbing")
     # fill absorption times
     for i, element in enumerate(elements):
         element.absorbed_times = absorption_times[absorption_indices == i].tolist()
@@ -352,7 +368,12 @@ if __name__ == "__main__":
     # import timeit
     # def my_function():
         # main()
-    # n_trials = 1000
+    # n_trials = 10
     # execution_time = timeit.timeit(my_function, number=n_trials)
     # print(f"Execution time: {execution_time*1000/n_trials:.5f} ms")
     # breakpoint()
+
+    # # torch profiler
+    # # open Instruments > Metal System Trace > run script while recording
+    # with torch.mps.profiler.profile(mode='interval'):
+        # main()
