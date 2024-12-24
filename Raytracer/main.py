@@ -1,6 +1,15 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import math
+from random import random
 import torch
+
+
+"""
+Terminology:
+    - Face: a human-readable object with Euclidean coordinates and a tensor() function that returns a FaceTensor
+    - FaceTensor: a dataclass of non-human-readable Tensors used in raytracing calculations
+    - Element: a Face with reflectivity and a list of absorption times
+"""
 
 
 @dataclass
@@ -37,14 +46,38 @@ class Ray:
     velocity: Vector
 
 
-@dataclass
 class RectFace:
     def tensor(self) -> "RectFaceTensor":
         raise NotImplementedError
 
 
 @dataclass
-class XRect(RectFace):
+class RectFaceTensor:
+    normal: torch.Tensor
+    d_origin: torch.Tensor  # distance from origin to face, in the direction of the normal
+    in_plane_a: torch.Tensor  # vector in the plane of the face
+    a_min: torch.Tensor  # bounds for the vector
+    a_max: torch.Tensor  # bounds for the vector
+    in_plane_b: torch.Tensor
+    b_min: torch.Tensor
+    b_max: torch.Tensor
+
+    def to(self, device: torch.device) -> 'RectFaceTensor':
+        dtype = torch.float32
+        return RectFaceTensor(
+            normal=self.normal.to(device, dtype=dtype),
+            d_origin=self.d_origin.to(device, dtype=dtype),
+            in_plane_a=self.in_plane_a.to(device, dtype=dtype),
+            a_min=self.a_min.to(device, dtype=dtype),
+            a_max=self.a_max.to(device, dtype=dtype),
+            in_plane_b=self.in_plane_b.to(device, dtype=dtype),
+            b_min=self.b_min.to(device, dtype=dtype),
+            b_max=self.b_max.to(device, dtype=dtype),
+        )
+
+
+@dataclass
+class XRectFace(RectFace):
     x: float
     y_min: float
     y_max: float
@@ -65,7 +98,7 @@ class XRect(RectFace):
 
 
 @dataclass
-class YRect(RectFace):
+class YRectFace(RectFace):
     x_min: float
     x_max: float
     y: float
@@ -86,7 +119,7 @@ class YRect(RectFace):
 
 
 @dataclass
-class ZRect(RectFace):
+class ZRectFace(RectFace):
     x_min: float
     x_max: float
     y_min: float
@@ -110,34 +143,34 @@ class ZRect(RectFace):
 class RectElement:
     face: RectFace
     reflectivity: float
-    absorbed_times: list[float] = field(default_factory=list)
 
 
-@dataclass
-class RectFaceTensor:
-    normal: torch.Tensor
-    d_origin: torch.Tensor  # distance from origin to face, in the direction of the normal
-    in_plane_a: torch.Tensor  # vector in the plane of the face
-    a_min: torch.Tensor  # bounds for the vector
-    a_max: torch.Tensor  # bounds for the vector
-    in_plane_b: torch.Tensor
-    b_min: torch.Tensor
-    b_max: torch.Tensor
-
-    def to(self, device: torch.device) -> 'RectFaceTensor':
-        return RectFaceTensor(
-            normal=self.normal.to(device),
-            d_origin=self.d_origin.to(device),
-            in_plane_a=self.in_plane_a.to(device),
-            a_min=self.a_min.to(device),
-            a_max=self.a_max.to(device),
-            in_plane_b=self.in_plane_b.to(device),
-            b_min=self.b_min.to(device),
-            b_max=self.b_max.to(device),
+def make_box_elements(
+    x_min: float, x_max: float,
+    y_min: float, y_max: float,
+    z_min: float, z_max: float,
+    reflectivity: float,
+) -> list[RectElement]:
+    """
+    Make all RectElements for a box of given dimensions.
+    """
+    return [
+        RectElement(
+            face=box_face,
+            reflectivity=reflectivity,
         )
+        for box_face in [
+            XRectFace(x_min, y_min, y_max, z_min, z_max),
+            XRectFace(x_max, y_min, y_max, z_min, z_max),
+            YRectFace(x_min, x_max, y_min, z_min, z_max),
+            YRectFace(x_min, x_max, y_max, z_min, z_max),
+            ZRectFace(x_min, x_max, y_min, y_max, z_min),
+            ZRectFace(x_min, x_max, y_min, y_max, z_max),
+        ]
+    ]
 
 
-class TensorizedGeometry:
+class _TensorizedGeometry:
     def __init__(self, elements: list[RectElement], device: torch.device):
         face_tensors = [element.face.tensor().to(device) for element in elements]
         self.face_normals = torch.stack([face.normal for face in face_tensors], dim=1)
@@ -154,26 +187,18 @@ class TensorizedGeometry:
         )
 
 
-@dataclass
-class TensorizedRays:
-    n_rays: int
-    ray_times: torch.Tensor
-    ray_positions: torch.Tensor
-    ray_velocities: torch.Tensor
+class _TensorizedRays:
+    def __init__(self, rays: list[Ray], device: torch.device):
+        self.n_rays = len(rays)
+        dtype = torch.float32
+        self.ray_times = torch.zeros((self.n_rays,), device=device, dtype=dtype)
+        self.ray_positions = torch.tensor([[ray.position.x, ray.position.y, ray.position.z] for ray in rays], device=device, dtype=dtype)
+        self.ray_velocities = torch.tensor([[ray.velocity.x, ray.velocity.y, ray.velocity.z] for ray in rays], device=device, dtype=dtype)
 
 
-def generate_tensorized_rays(n_rays: int, device: torch.device) -> TensorizedRays:
-    return TensorizedRays(
-        n_rays = n_rays,
-        ray_times = torch.zeros((n_rays,), device=device),
-        ray_positions = torch.rand((n_rays, 3), device=device) * 8 + 1,
-        ray_velocities = torch.rand((n_rays, 3), device=device) * 2 - 1,
-    )
-
-
-def intersect_rays(
-    r: TensorizedRays,
-    g: TensorizedGeometry,
+def _intersect_rays(
+    r: _TensorizedRays,
+    g: _TensorizedGeometry,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Return the following for each ray in the scene:
@@ -220,22 +245,51 @@ def intersect_rays(
     return hit_times, closest_indices, closest_normals
 
 
-def raytrace_event(
-    geometry: TensorizedGeometry,
-    rays: TensorizedRays,
+def intersect_rays(
+    all_elements: list[RectElement],
+    all_rays: list[Ray],
     device: torch.device,
-) -> tuple[int, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    geometry = _TensorizedGeometry(all_elements, device)
+    rays = _TensorizedRays(all_rays, device)
+    hit_times, closest_indices, closest_normals = _intersect_rays(rays, geometry)
+    return hit_times, closest_indices, closest_normals
+
+
+def raytrace_event(
+    all_elements: list[RectElement],
+    all_rays: list[Ray],
+    max_bounces: int,
+    device: torch.device,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    geometry = _TensorizedGeometry(all_elements, device)
+    rays = _TensorizedRays(all_rays, device)
+
     absorption_indices = torch.full((rays.n_rays,), -2, device=device)  # -2 = in flight, -1 = lost
     absorption_times = torch.full((rays.n_rays,), -1.0, device=device)
     done_mask = torch.full((rays.n_rays,), True, device=device)
-    max_bounces = 100
 
-    for bounce in range(max_bounces):
+    for bounce_n in range(max_bounces):
         n_photons_remaining = int(torch.sum(done_mask).item())
         if not n_photons_remaining:
             break
 
-        hit_times, closest_indices, closest_normals = intersect_rays(rays, geometry)
+        hit_times, closest_indices, closest_normals = _intersect_rays(rays, geometry)
+
+        # propagate rays
+        rays.ray_positions += (
+            rays.ray_velocities *
+            (hit_times - 1e-4).unsqueeze(1)  # epsilon difference to avoid tunneling
+        )
+        rays.ray_times += hit_times
+
+        # reflect ray_velocities using face normals: R = V - 2 * (V · N) * N
+        dot_product = torch.sum(
+            rays.ray_velocities * closest_normals,
+            dim=1,
+            keepdim=True,
+        )
+        rays.ray_velocities -= 2 * dot_product * closest_normals
 
         # rays that hit an absorber or nothing are lost
         absorbed_mask = torch.rand(n_photons_remaining, device=device) < geometry.face_reflectivities[closest_indices]
@@ -260,22 +314,7 @@ def raytrace_event(
         hit_times = hit_times[new_mask]
         closest_normals = closest_normals[new_mask]
 
-        # propagate rays
-        rays.ray_positions += (
-            rays.ray_velocities *
-            (hit_times - 1e-5).unsqueeze(1)  # avoid tunneling
-        )
-        rays.ray_times += hit_times
-
-        # reflect ray_velocities using face normals: R = V - 2 * (V · N) * N
-        dot_product = torch.sum(
-            rays.ray_velocities * closest_normals,
-            dim=1,
-            keepdim=True,
-        )
-        rays.ray_velocities -= 2 * dot_product * closest_normals
-
-    return bounce, absorption_indices, absorption_times, done_mask  # type: ignore
+    return absorption_indices, absorption_times  # type: ignore
 
 
 def main():
@@ -288,20 +327,20 @@ def main():
 
     # populate scene
     wall_faces = [
-        XRect(x=0, y_min=0, y_max=10, z_min=0, z_max=10),
-        XRect(x=10, y_min=0, y_max=10, z_min=0, z_max=10),
-        YRect(x_min=0, x_max=10, y=0, z_min=0, z_max=10),
-        YRect(x_min=0, x_max=10, y=10, z_min=0, z_max=10),
-        ZRect(x_min=0, x_max=10, y_min=0, y_max=10, z=0),
-        ZRect(x_min=0, x_max=10, y_min=0, y_max=10, z=10),
+        XRectFace(x=0, y_min=0, y_max=10, z_min=0, z_max=10),
+        XRectFace(x=10, y_min=0, y_max=10, z_min=0, z_max=10),
+        YRectFace(x_min=0, x_max=10, y=0, z_min=0, z_max=10),
+        YRectFace(x_min=0, x_max=10, y=10, z_min=0, z_max=10),
+        ZRectFace(x_min=0, x_max=10, y_min=0, y_max=10, z=0),
+        ZRectFace(x_min=0, x_max=10, y_min=0, y_max=10, z=10),
     ]
     absorber_faces = [
-        XRect(x=4, y_min=4, y_max=6, z_min=4, z_max=6),
-        XRect(x=6, y_min=4, y_max=6, z_min=4, z_max=6),
-        YRect(x_min=4, x_max=6, y=4, z_min=4, z_max=6),
-        YRect(x_min=4, x_max=6, y=6, z_min=4, z_max=6),
-        ZRect(x_min=4, x_max=6, y_min=4, y_max=6, z=4),
-        ZRect(x_min=4, x_max=6, y_min=4, y_max=6, z=6),
+        XRectFace(x=4, y_min=4, y_max=6, z_min=4, z_max=6),
+        XRectFace(x=6, y_min=4, y_max=6, z_min=4, z_max=6),
+        YRectFace(x_min=4, x_max=6, y=4, z_min=4, z_max=6),
+        YRectFace(x_min=4, x_max=6, y=6, z_min=4, z_max=6),
+        ZRectFace(x_min=4, x_max=6, y_min=4, y_max=6, z=4),
+        ZRectFace(x_min=4, x_max=6, y_min=4, y_max=6, z=6),
     ]
     elements = [
         RectElement(face=face, reflectivity=0.95)
@@ -310,7 +349,6 @@ def main():
         RectElement(face=face, reflectivity=0.0)
         for face in absorber_faces
     ]
-    geometry = TensorizedGeometry(elements, device)
 
     # raytrace
     n_rays_per_event = 30_000
@@ -318,24 +356,21 @@ def main():
     n_events_in_batch = 250
     n_rays_per_batch = n_rays_per_event * n_events_in_batch
     n_batches = n_total_events // n_events_in_batch
+    max_bounces = 100
 
     for _ in range(n_batches):
-        rays = generate_tensorized_rays(n_rays_per_batch, device)
-        bounce, absorption_indices, absorption_times, done_mask = raytrace_event(geometry, rays, device)
-        for i, element in enumerate(elements):
-            element.absorbed_times = absorption_times[absorption_indices == i].tolist()
-
-        # results
-        """
-        print(f"Simulation finished after {bounce + 1} bounces")  # type: ignore
-        print("Absorption:")
-        print("\n".join(
-            f"\tFace {i}: {len(elements[i].absorbed_times)} absorbed rays"
-            for i in range(len(elements))
-        ))
-        print(f"Lost rays: {torch.sum(absorption_indices == -1)}")
-        print(f"Rays in flight: {torch.sum(done_mask)}")
-        """
+        rays = [
+            Ray(
+                position = Vector(random()*8+1, random()*8+1, random()*8+1),
+                velocity = Vector(random()*2-1, random()*2-1, random()*2-1),
+            )
+            for _ in range(n_rays_per_batch)
+        ]
+        absorption_indices, absorption_times = raytrace_event(elements, rays, max_bounces, device)
+        absorption_times = [
+            absorption_times[absorption_indices == i].tolist()
+            for i, _ in enumerate(elements)
+        ]
 
 
 if __name__ == "__main__":
